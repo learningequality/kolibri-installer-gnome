@@ -4,3 +4,10 @@ option(
     value: '',
     description: 'Directory where a KOLIBRI_HOME template is located'
 )
+
+option(
+    'kolibri_content_dir',
+    type: 'string',
+    value: '',
+    description: 'Directory where Kolibri content extensions are located'
+)
