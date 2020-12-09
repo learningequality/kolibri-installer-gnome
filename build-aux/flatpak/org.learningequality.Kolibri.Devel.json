@@ -104,6 +104,24 @@
             ]
         },
         {
+            "name": "kolibri-hack",
+            "buildsystem": "simple",
+            "build-commands": [
+                "cp server.py /app/lib/python3.7/site-packages/kolibri/utils/server.py",
+                "cp cli.py /app/lib/python3.7/site-packages/kolibri/utils/cli.py"
+            ],
+            "sources": [
+                {
+                    "type": "file",
+                    "path": "server.py"
+                },
+                {
+                    "type": "file",
+                    "path": "cli.py"
+                }
+            ]
+        },
+        {
             "name" : "kolibri-daemon",
             "buildsystem" : "meson",
             "builddir" : true,
