@@ -3,7 +3,7 @@
     "runtime" : "org.gnome.Platform",
     "runtime-version" : "3.36",
     "sdk" : "org.gnome.Sdk",
-    "command" : "kolibri-daemon",
+    "command" : "/app/bin/kolibri-gnome",
     "desktop-file-name-suffix" : " ☢️",
     "finish-args" : [
         "--device=dri",

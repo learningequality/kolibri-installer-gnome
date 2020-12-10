@@ -20,12 +20,12 @@ import gi
 
 gi.require_version("WebKit2", "4.0")
 from gi.repository import WebKit2
+from gi.repository import Gio
 
 from .. import config
 
 from ..globals import KOLIBRI_APP_DEVELOPER_EXTRAS, KOLIBRI_HOME, XDG_CURRENT_DESKTOP
-from ..kolibri_service.kolibri_service import KolibriServiceManager
-from .utils import get_localized_file
+from .utils import get_kolibri_initialize_url, get_localized_file
 
 
 class RedirectLoading(Exception):
@@ -100,6 +100,7 @@ class KolibriView(pew.ui.WebUIView, MenuEventHandler):
         self.delegate.remove_window(self)
 
     def load_url(self, url, with_redirect=True):
+        print("LOAD URL", url)
         with self.__load_url_lock:
             self.__target_url = url
             try:
@@ -258,6 +259,100 @@ class KolibriWindow(KolibriView):
             return None
 
 
+class KolibriDaemonProxy(object):
+    def __init__(self, application):
+        self.__application = application
+        self.__proxy = Gio.DBusProxy.new_for_bus_sync(
+            Gio.BusType.SESSION,
+            Gio.DBusProxyFlags.NONE,
+            None,
+            config.DAEMON_APPLICATION_ID,
+            "/org/learningequality/Kolibri/Devel/Daemon",
+            "org.learningequality.Kolibri.Daemon",
+            None
+        )
+
+    def get_app_key(self):
+        print("get_app_key")
+        result = self.__proxy.call_sync("GetAppKey", None, Gio.DBusCallFlags.NONE, -1, None)
+        return result[0]
+
+    def get_base_url(self):
+        print("get_base_url")
+        result = self.__proxy.call_sync("GetBaseURL", None, Gio.DBusCallFlags.NONE, -1, None)
+        return result[0]
+
+    def get_status(self):
+        result = self.__proxy.call_sync("GetStatus", None, Gio.DBusCallFlags.NONE, -1, None)
+        return result[0]
+
+    def hold(self):
+        print("hold")
+        self.__proxy.call_sync("Hold", None, Gio.DBusCallFlags.NONE, -1, None)
+
+    def release(self):
+        print("release")
+        self.__proxy.call_sync("Release", None, Gio.DBusCallFlags.NONE, -1, None)
+
+    @property
+    def is_responding(self):
+        return self.get_is_responding()
+
+    def get_is_responding(self):
+        print("get_is_responding")
+        status = self.get_status()
+        print("GOT STATUS", status)
+        if status == "STARTED":
+            return True
+        elif status == "ERROR":
+            return False
+        elif status == "STOPPED":
+            return False
+        else:
+            return None
+
+    def await_is_responding(self):
+        print("await_is_responding")
+        import time
+        # FIXME: This is of course terrible and we should subscribe to the
+        #        IsReady signal instead.
+        while True:
+            is_responding = self.get_is_responding()
+            if is_responding is not None:
+                return is_responding
+            else:
+                time.sleep(1)
+
+    def is_kolibri_app_url(self, url):
+        base_url = self.get_base_url()
+
+        if not base_url:
+            print("is_kolibri_app_url called but base_url is unset")
+            return True
+
+        if not url:
+            return False
+        elif not url.startswith(base_url):
+            return False
+        elif url.startswith(base_url + "static/"):
+            return False
+        elif url.startswith(base_url + "downloadcontent/"):
+            return False
+        elif url.startswith(base_url + "content/storage/"):
+            return False
+        else:
+            return True
+
+    def get_initialize_url(self, next_url):
+        print("get_initialize_url")
+        base_url = self.get_base_url()
+        app_key = self.get_app_key()
+        if not base_url or not app_key:
+            print("get_initialize_url called but base_url or app_key are unset")
+            return None
+        return get_kolibri_initialize_url(base_url, app_key, next_url)
+
+
 class Application(pew.ui.PEWApp):
     application_id = config.APPLICATION_ID
 
@@ -270,7 +365,7 @@ class Application(pew.ui.PEWApp):
         )
         self.__loader_url = "file://{path}".format(path=os.path.abspath(loader_path))
 
-        self.__kolibri_service_manager = KolibriServiceManager()
+        self.__kolibri_service_manager = KolibriDaemonProxy(self)
 
         self.__windows = []
 
@@ -291,12 +386,8 @@ class Application(pew.ui.PEWApp):
             pew.ui.run_on_main_thread(main_window.load_url, saved_url)
 
     def shutdown(self):
-        logger.info("Stopping Kolibri service...")
-        self.__kolibri_service_manager.stop_kolibri()
+        self.__kolibri_service_manager.release()
         super().shutdown()
-
-    def join(self):
-        self.__kolibri_service_manager.join()
 
     def should_load_url(self, url):
         if self.is_kolibri_app_url(url):
@@ -325,9 +416,9 @@ class Application(pew.ui.PEWApp):
         return self.__open_window(target_url)
 
     def __open_window(self, target_url=None):
-        self.__kolibri_service_manager.start_kolibri()
+        self.__kolibri_service_manager.hold()
 
-        target_url = target_url or self.__kolibri_service_manager.get_kolibri_url()
+        target_url = target_url or self.__kolibri_service_manager.get_base_url()
         window = KolibriWindow(
             _("Kolibri"),
             target_url,
@@ -374,7 +465,7 @@ class Application(pew.ui.PEWApp):
         if parse.query:
             item_fragment += "?{}".format(parse.query)
 
-        target_url = self.__kolibri_service_manager.get_kolibri_url(
+        target_url = self.__kolibri_service_manager.get_base_url(
             path=item_path, fragment=item_fragment
         )
 
@@ -390,7 +481,7 @@ class Application(pew.ui.PEWApp):
         # treat it as a "blank" window which can be reused to show content
         # from handle_open_file_uris.
         for window in reversed(self.__windows):
-            if window.target_url == self.__kolibri_service_manager.get_kolibri_url():
+            if window.target_url == self.__kolibri_service_manager.get_base_url():
                 return window
         return None
 
