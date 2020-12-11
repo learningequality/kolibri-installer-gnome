@@ -100,7 +100,6 @@ class KolibriView(pew.ui.WebUIView, MenuEventHandler):
         self.delegate.remove_window(self)
 
     def load_url(self, url, with_redirect=True):
-        print("LOAD URL", url)
         with self.__load_url_lock:
             self.__target_url = url
             try:
@@ -271,20 +270,28 @@ class KolibriDaemonProxy(object):
             "org.learningequality.Kolibri.Daemon",
             None
         )
+        self.__proxy.connect("g_properties_changed", self.__on_proxy_g_properties_changed)
 
-    def get_app_key(self):
-        print("get_app_key")
-        result = self.__proxy.call_sync("GetAppKey", None, Gio.DBusCallFlags.NONE, -1, None)
-        return result[0]
+    def __on_proxy_g_properties_changed(self, proxy, changed_properties, invalidated_properties):
+        print("PROXY PROPERTIES CHANGED")
 
-    def get_base_url(self):
-        print("get_base_url")
-        result = self.__proxy.call_sync("GetBaseURL", None, Gio.DBusCallFlags.NONE, -1, None)
-        return result[0]
+    @property
+    def app_key(self):
+        variant = self.__proxy.get_cached_property("AppKey")
+        print("get_app_key", variant.get_string())
+        return variant.get_string()
 
-    def get_status(self):
-        result = self.__proxy.call_sync("GetStatus", None, Gio.DBusCallFlags.NONE, -1, None)
-        return result[0]
+    @property
+    def base_url(self):
+        variant = self.__proxy.get_cached_property("BaseURL")
+        print("get_base_url", variant.get_string())
+        return variant.get_string()
+
+    @property
+    def status(self):
+        variant = self.__proxy.get_cached_property("Status")
+        print("get_status", variant.get_string())
+        return variant.get_string()
 
     def hold(self):
         print("hold")
@@ -300,13 +307,11 @@ class KolibriDaemonProxy(object):
 
     def get_is_responding(self):
         print("get_is_responding")
-        status = self.get_status()
-        print("GOT STATUS", status)
-        if status == "STARTED":
+        if not self.base_url or not self.app_key:
+            return None
+        elif self.status in ["STARTED"]:
             return True
-        elif status == "ERROR":
-            return False
-        elif status == "STOPPED":
+        elif self.status in ["STOPPED", "ERROR"]:
             return False
         else:
             return None
@@ -318,39 +323,40 @@ class KolibriDaemonProxy(object):
         #        IsReady signal instead.
         while True:
             is_responding = self.get_is_responding()
-            if is_responding is not None:
-                return is_responding
-            else:
+            if is_responding is None:
                 time.sleep(1)
+            else:
+                return is_responding
 
     def is_kolibri_app_url(self, url):
-        base_url = self.get_base_url()
-
-        if not base_url:
+        if not self.base_url:
             print("is_kolibri_app_url called but base_url is unset")
+            return True
+
+        if callable(url):
             return True
 
         if not url:
             return False
-        elif not url.startswith(base_url):
+        elif not url.startswith(self.base_url):
             return False
-        elif url.startswith(base_url + "static/"):
+        elif url.startswith(self.base_url + "static/"):
             return False
-        elif url.startswith(base_url + "downloadcontent/"):
+        elif url.startswith(self.base_url + "downloadcontent/"):
             return False
-        elif url.startswith(base_url + "content/storage/"):
+        elif url.startswith(self.base_url + "content/storage/"):
             return False
         else:
             return True
 
     def get_initialize_url(self, next_url):
         print("get_initialize_url")
-        base_url = self.get_base_url()
-        app_key = self.get_app_key()
-        if not base_url or not app_key:
+        if not self.base_url or not self.app_key:
             print("get_initialize_url called but base_url or app_key are unset")
             return None
-        return get_kolibri_initialize_url(base_url, app_key, next_url)
+        if callable(next_url):
+            next_url = next_url()
+        return get_kolibri_initialize_url(self.base_url, self.app_key, next_url)
 
 
 class Application(pew.ui.PEWApp):
@@ -409,6 +415,8 @@ class Application(pew.ui.PEWApp):
             raise RedirectError()
         elif self.__kolibri_service_manager.is_kolibri_app_url(url):
             return self.__kolibri_service_manager.get_initialize_url(url)
+        elif callable(url):
+            return url()
         else:
             return url
 
@@ -418,7 +426,7 @@ class Application(pew.ui.PEWApp):
     def __open_window(self, target_url=None):
         self.__kolibri_service_manager.hold()
 
-        target_url = target_url or self.__kolibri_service_manager.get_base_url()
+        target_url = target_url or self.__get_base_url
         window = KolibriWindow(
             _("Kolibri"),
             target_url,
@@ -429,6 +437,9 @@ class Application(pew.ui.PEWApp):
         self.add_window(window)
         window.show()
         return window
+
+    def __get_base_url(self):
+        return self.__kolibri_service_manager.base_url
 
     def add_window(self, window):
         self.__windows.append(window)
@@ -465,6 +476,7 @@ class Application(pew.ui.PEWApp):
         if parse.query:
             item_fragment += "?{}".format(parse.query)
 
+        # FIXME: This is broken. Fix before merging.
         target_url = self.__kolibri_service_manager.get_base_url(
             path=item_path, fragment=item_fragment
         )
@@ -481,9 +493,9 @@ class Application(pew.ui.PEWApp):
         # treat it as a "blank" window which can be reused to show content
         # from handle_open_file_uris.
         for window in reversed(self.__windows):
-            if window.target_url == self.__kolibri_service_manager.get_base_url():
+            if window.target_url == self.__kolibri_service_manager.base_url:
                 return window
         return None
 
     def __is_loader_url(self, url):
-        return url and url.startswith(self.__loader_url)
+        return url and not callable(url) and url.startswith(self.__loader_url)

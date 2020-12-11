@@ -1,10 +1,14 @@
 import json
 import multiprocessing
 import os
+import threading
 from collections import Mapping
 from contextlib import contextmanager
 
 from .content_extensions import ContentExtensionsList
+
+# TODO: We need to use multiprocessing because Kolibri occasionally calls
+#       os.kill against its own process ID.
 
 
 class KolibriServiceMainProcess(multiprocessing.Process):
@@ -19,6 +23,11 @@ class KolibriServiceMainProcess(multiprocessing.Process):
         self.__active_extensions = ContentExtensionsList.from_flatpak_info()
         super().__init__()
 
+    def start(self):
+        super().start()
+        watch_thread = KolibriServiceMainProcessWatchThread(self)
+        watch_thread.start()
+
     def run(self):
         with self.__set_is_stopped_on_exit():
             self.__run_kolibri_start()
@@ -29,8 +38,13 @@ class KolibriServiceMainProcess(multiprocessing.Process):
         try:
             yield
         finally:
-            self.__context.is_starting = False
-            self.__context.is_stopped = True
+            self._set_is_stopped()
+
+    def _set_is_stopped(self):
+        self.__context.is_starting = False
+        self.__context.is_stopped = True
+        self.__context.base_url = ""
+        self.__context.app_key = ""
 
     def __run_kolibri_start(self):
         self.__context.await_is_stopped()
@@ -119,3 +133,20 @@ class KolibriServiceMainProcess(multiprocessing.Process):
             options.setdefault("facility_settings", {})
             options.setdefault("device_settings", {})
             call_command("provisiondevice", interactive=False, **options)
+
+
+class KolibriServiceMainProcessWatchThread(threading.Thread):
+    """
+    Because the Kolibri service process may be terminated more agressively than
+    we like, we will watch for it to exit with a separate thread in the parent
+    process as well.
+    """
+
+    def __init__(self, main_process):
+        self.__main_process = main_process
+        super().__init__()
+
+    def run(self):
+        self.__main_process.join()
+        self.__main_process._set_is_stopped()
+

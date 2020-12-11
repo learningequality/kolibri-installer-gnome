@@ -3,6 +3,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 import multiprocessing
+import threading
 
 from ctypes import c_bool, c_char, c_int
 from enum import Enum
@@ -33,6 +34,8 @@ class KolibriServiceContext(object):
         ERROR = 3
 
     def __init__(self):
+        self.__changed_condition = multiprocessing.Condition()
+
         self.__is_starting_value = multiprocessing.Value(c_bool)
         self.__is_starting_set_event = multiprocessing.Event()
 
@@ -54,6 +57,14 @@ class KolibriServiceContext(object):
         self.__base_url_value = multiprocessing.Array(c_char, self.BASE_URL_LENGTH)
         self.__base_url_set_event = multiprocessing.Event()
 
+    def changed(self):
+        with self.__changed_condition:
+            self.__changed_condition.notify_all()
+
+    def wait_for_changes(self, timeout=None):
+        with self.__changed_condition:
+            self.__changed_condition.wait(timeout=timeout)
+
     @property
     def is_starting(self):
         if self.__is_starting_set_event.is_set():
@@ -69,6 +80,7 @@ class KolibriServiceContext(object):
         else:
             self.__is_starting_value.value = bool(is_starting)
             self.__is_starting_set_event.set()
+        self.changed()
 
     def await_is_starting(self):
         self.__is_starting_set_event.wait()
@@ -89,6 +101,7 @@ class KolibriServiceContext(object):
         else:
             self.__start_result_value.value = start_result.value
             self.__start_result_set_event.set()
+        self.changed()
 
     def await_start_result(self):
         self.__start_result_set_event.wait()
@@ -108,6 +121,7 @@ class KolibriServiceContext(object):
             self.__is_stopped_set_event.clear()
         else:
             self.__is_stopped_set_event.set()
+        self.changed()
 
     def await_is_stopped(self):
         self.__is_stopped_set_event.wait()
@@ -128,6 +142,7 @@ class KolibriServiceContext(object):
         else:
             self.__setup_result_value.value = setup_result.value
             self.__setup_result_set_event.set()
+        self.changed()
 
     def await_setup_result(self):
         self.__setup_result_set_event.wait()
@@ -147,6 +162,7 @@ class KolibriServiceContext(object):
             self.__is_responding_set_event.clear()
         else:
             self.__is_responding_set_event.set()
+        self.changed()
 
     def await_is_responding(self):
         self.__is_responding_set_event.wait()
@@ -166,6 +182,7 @@ class KolibriServiceContext(object):
             self.__app_key_set_event.clear()
         else:
             self.__app_key_set_event.set()
+        self.changed()
 
     def await_app_key(self):
         self.__app_key_set_event.wait()
@@ -185,6 +202,7 @@ class KolibriServiceContext(object):
             self.__base_url_set_event.clear()
         else:
             self.__base_url_set_event.set()
+        self.changed()
 
     def await_base_url(self):
         self.__base_url_set_event.wait()
@@ -214,7 +232,8 @@ class KolibriServiceManager(KolibriServiceContext):
         self.__setup_process = None
         self.__stop_process = None
 
-    def get_status(self):
+    @property
+    def status(self):
         if self.is_starting:
             return self.Status.STARTING
         elif self.is_stopped:
@@ -249,6 +268,10 @@ class KolibriServiceManager(KolibriServiceContext):
         if self.__stop_process and self.__stop_process.is_alive():
             self.__stop_process.join()
 
+    def watch_changes(self, callback):
+        watch_changes_thread = WatchChangesThread(self, callback)
+        watch_changes_thread.start()
+
     def start_kolibri(self):
         if not self.__setup_process:
             self.__setup_process = KolibriServiceSetupProcess(self)
@@ -272,3 +295,16 @@ class KolibriServiceManager(KolibriServiceContext):
         else:
             self.__stop_process = KolibriServiceStopProcess(self)
             self.__stop_process.start()
+
+
+class WatchChangesThread(threading.Thread):
+    def __init__(self, kolibri_service_manager, callback):
+        self.__kolibri_service_manager = kolibri_service_manager
+        self.__callback = callback
+        super().__init__(daemon=True)
+
+    def run(self):
+        while True:
+            self.__kolibri_service_manager.wait_for_changes()
+            self.__callback()
+
