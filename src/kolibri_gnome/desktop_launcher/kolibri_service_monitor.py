@@ -1,6 +1,14 @@
+# TODO: Do we still need this if we only start polling after Kolibri starts?
+
+import logging
+
+logger = logging.getLogger(__name__)
+
 import collections
 import json
-import os
+import threading
+import time
+
 from urllib.error import URLError
 from urllib.parse import urlencode
 from urllib.parse import urljoin
@@ -9,14 +17,33 @@ from urllib.parse import urlunsplit
 from urllib.request import Request
 from urllib.request import urlopen
 
-# from kolibri.utils.conf import OPTIONS
 
-# KOLIBRI_HTTP_PORT = OPTIONS["Deployment"]["HTTP_PORT"]
-# KOLIBRI_URL_PATH_PREFIX = OPTIONS["Deployment"]["URL_PATH_PREFIX"]
+class KolibriServiceMonitorProcess(threading.Thread):
+    """
+    Polls Kolibri at the expected URL to detect when it is responding to
+    requests.
+    - Sets context.is_responding to True when Kolibri is responding to
+      requests, or to False if Kolibri fails to start.
+    """
 
-# KOLIBRI_BASE_URL = urljoin(
-#     "http://localhost:{}".format(KOLIBRI_HTTP_PORT), KOLIBRI_URL_PATH_PREFIX
-# )
+    def __init__(self, context):
+        self.__context = context
+        super().__init__()
+
+    def run(self):
+        base_url = self.__context.await_base_url()
+
+        self.__context.await_is_starting()
+
+        while not is_kolibri_responding(base_url):
+            if self.__context.is_stopped:
+                logger.warning("Kolibri service has died")
+                self.__context.is_responding = False
+                return
+            time.sleep(1)
+
+        logger.info("Kolibri service is responding")
+        self.__context.is_responding = True
 
 
 class KolibriAPIError(Exception):
@@ -53,3 +80,4 @@ def kolibri_api_get_json(base_url, path, query={}):
         raise KolibriAPIError(error)
 
     return data
+

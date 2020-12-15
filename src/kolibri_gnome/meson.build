@@ -5,7 +5,6 @@ kolibri_gnome_sources = [
     'dbus_utils.py',
     'globals.py',
     '__init__.py',
-    'kolibri_globals.py',
     'kolibri_settings.py',
 ]
 
@@ -17,6 +16,7 @@ python_installation.install_sources(
 desktop_launcher_sources = [
     'desktop_launcher/application.py',
     'desktop_launcher/__init__.py',
+    'desktop_launcher/kolibri_service_monitor.py',
     'desktop_launcher/main.py',
     'desktop_launcher/utils.py',
 ]
@@ -31,7 +31,6 @@ kolibri_daemon_sources = [
     'kolibri_daemon/content_extensions.py',
     'kolibri_daemon/__init__.py',
     'kolibri_daemon/kolibri_service_main.py',
-    'kolibri_daemon/kolibri_service_monitor.py',
     'kolibri_daemon/kolibri_service.py',
     'kolibri_daemon/kolibri_service_setup.py',
     'kolibri_daemon/kolibri_service_stop.py',
