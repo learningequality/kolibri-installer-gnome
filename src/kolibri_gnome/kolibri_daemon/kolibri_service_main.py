@@ -61,7 +61,7 @@ class KolibriServiceMainProcess(multiprocessing.Process):
         self.__active_extensions.update_kolibri_environ(os.environ)
 
         from kolibri.plugins.registry import registered_plugins
-        from kolibri.utils.cli import initialize, setup_logging, start
+        from kolibri.utils.cli import initialize, setup_logging, start_with_ready_cb
 
         registered_plugins.register_plugins(["kolibri.plugins.app"])
 
@@ -73,8 +73,10 @@ class KolibriServiceMainProcess(multiprocessing.Process):
 
         try:
             KOLIBRI_HTTP_PORT = 0
-            start.callback(
-                KOLIBRI_HTTP_PORT, background=False, ready_cb=self.__kolibri_ready_cb
+            start_with_ready_cb(
+                port=KOLIBRI_HTTP_PORT,
+                background=False,
+                ready_cb=self.__kolibri_ready_cb
             )
         except SystemExit:
             # Kolibri sometimes calls sys.exit, but we don't want to exit

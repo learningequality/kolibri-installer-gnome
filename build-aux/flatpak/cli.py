@@ -15,6 +15,7 @@ import logging
 import os
 import signal
 import sys
+from functools import partial
 from sqlite3 import DatabaseError as SQLite3DatabaseError
 
 import click
@@ -497,11 +498,31 @@ def create_startup_lock(port):
     default=True,
     help="Run Kolibri as a background process",
 )
-def start(port, background, ready_cb=None):
+def start(port, background):
     """
     Start the server on given port.
     """
 
+    start_with_ready_cb(port, background, ready_cb=_on_ready)
+
+
+def _on_ready(urls):
+    if not urls:
+        logger.error(
+            "Could not detect an IP address that Kolibri binds to, but try "
+            "opening up the following addresses:\n"
+        )
+        urls = [
+            "http://{}:{}".format(ip, bind_port) for ip in ("localhost", "127.0.0.1")
+        ]
+    else:
+        logger.info("Kolibri running on:\n")
+    for addr in urls:
+        sys.stderr.write("\t{}\n".format(addr))
+    sys.stderr.write("\n")
+
+
+def start_with_ready_cb(port, background, ready_cb=None):
     # Check if there is an options.ini file exist inside the KOLIBRI_HOME folder
     sanity_checks.check_default_options_exist()
 
@@ -545,25 +566,7 @@ def start(port, background, ready_cb=None):
 
         become_daemon(**kwargs)
 
-    def on_ready(urls):
-        if not urls:
-            logger.error(
-                "Could not detect an IP address that Kolibri binds to, but try "
-                "opening up the following addresses:\n"
-            )
-            urls = [
-                "http://{}:{}".format(ip, bind_port) for ip in ("localhost", "127.0.0.1")
-            ]
-        else:
-             logger.info("Kolibri running on:\n")
-        for addr in urls:
-            sys.stderr.write("\t{}\n".format(addr))
-        sys.stderr.write("\n")
-
-        if callable(ready_cb):
-            ready_cb(urls)
-
-    server.start(port=port, serve_http=serve_http, ready_cb=on_ready)
+    server.start(port=port, serve_http=serve_http, ready_cb=ready_cb)
 
 
 @main.command(cls=KolibriCommand, help="Stop the Kolibri process")

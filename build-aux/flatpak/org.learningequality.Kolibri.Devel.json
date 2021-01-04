@@ -61,25 +61,6 @@
                 "touch ${KOLIBRI_HOME}/was_preseeded"
             ]
         },
-        {
-            "name" : "kolibri-home-template",
-            "buildsystem" : "simple",
-            "build-options" : {
-                "env" : {
-                    "KOLIBRI_HOME" : "/app/share/kolibri-home-template"
-                }
-            },
-            "build-commands" : [
-                "install -d ${KOLIBRI_HOME}",
-                "yes 'yes' | kolibri manage migrate",
-                "yes 'yes' | kolibri manage collectstatic",
-                "yes 'yes' | kolibri manage deprovision",
-                "rm -rf ${KOLIBRI_HOME}/logs",
-                "rm -rf ${KOLIBRI_HOME}/sessions",
-                "rm -rf ${KOLIBRI_HOME}/process_cache",
-                "touch ${KOLIBRI_HOME}/was_preseeded"
-            ]
-        },
         "python3-requests.json",
         "python3-virtualenv-api.json",
         {
@@ -104,25 +85,7 @@
             ]
         },
         {
-            "name": "kolibri-hack",
-            "buildsystem": "simple",
-            "build-commands": [
-                "cp server.py /app/lib/python3.7/site-packages/kolibri/utils/server.py",
-                "cp cli.py /app/lib/python3.7/site-packages/kolibri/utils/cli.py"
-            ],
-            "sources": [
-                {
-                    "type": "file",
-                    "path": "server.py"
-                },
-                {
-                    "type": "file",
-                    "path": "cli.py"
-                }
-            ]
-        },
-        {
-            "name" : "kolibri-daemon",
+            "name" : "kolibri-gnome",
             "buildsystem" : "meson",
             "builddir" : true,
             "run-tests" : true,
