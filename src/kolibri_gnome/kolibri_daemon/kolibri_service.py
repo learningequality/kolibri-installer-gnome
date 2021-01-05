@@ -47,9 +47,6 @@ class KolibriServiceContext(object):
         self.__setup_result_value = multiprocessing.Value(c_int)
         self.__setup_result_set_event = multiprocessing.Event()
 
-        self.__is_responding_value = multiprocessing.Value(c_bool)
-        self.__is_responding_set_event = multiprocessing.Event()
-
         self.__app_key_value = multiprocessing.Array(c_char, self.APP_KEY_LENGTH)
         self.__app_key_set_event = multiprocessing.Event()
 
@@ -214,12 +211,12 @@ class KolibriServiceManager(KolibriServiceContext):
     def status(self):
         if self.is_starting:
             return self.Status.STARTING
-        elif self.is_stopped:
-            return self.Status.STOPPED
-        elif self.start_result == self.StartResult.SUCCESS:
-            return self.Status.STARTED
         elif self.start_result == self.StartResult.ERROR:
             return self.Status.ERROR
+        elif self.start_result == self.StartResult.SUCCESS:
+            return self.Status.STARTED
+        elif self.is_stopped:
+            return self.Status.STOPPED
         else:
             return self.Status.NONE
 

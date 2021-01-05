@@ -379,7 +379,7 @@ def run_server(port, serve_http=True, ready_cb=None):
 
     if callable(ready_cb):
         __, urls = get_urls(listen_port=bind_port)
-        ready_cb(urls)
+        ready_cb(urls, bind_addr=bind_addr, bind_port=bind_port)
 
     cherrypy.engine.block()
 

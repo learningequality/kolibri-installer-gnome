@@ -15,7 +15,6 @@ import logging
 import os
 import signal
 import sys
-from functools import partial
 from sqlite3 import DatabaseError as SQLite3DatabaseError
 
 import click
@@ -506,7 +505,7 @@ def start(port, background):
     start_with_ready_cb(port, background, ready_cb=_on_ready)
 
 
-def _on_ready(urls):
+def _on_ready(urls, bind_addr=None, bind_port=None):
     if not urls:
         logger.error(
             "Could not detect an IP address that Kolibri binds to, but try "
