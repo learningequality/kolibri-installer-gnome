@@ -80,4 +80,3 @@ def kolibri_api_get_json(base_url, path, query={}):
         raise KolibriAPIError(error)
 
     return data
-
