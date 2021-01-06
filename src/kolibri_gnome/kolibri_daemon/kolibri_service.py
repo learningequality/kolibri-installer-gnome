@@ -65,7 +65,9 @@ class KolibriServiceContext(object):
 
     def wait_for_changes(self, timeout=None):
         with self.__changed_condition:
-            self.__changed_condition.wait(timeout=timeout)
+            while True:
+                self.__changed_condition.wait(timeout=timeout)
+                yield
 
     @property
     def is_starting(self):
@@ -237,10 +239,10 @@ class KolibriServiceManager(KolibriServiceContext):
     def status(self):
         if self.is_starting:
             return self.Status.STARTING
-        elif self.start_result == self.StartResult.ERROR:
-            return self.Status.ERROR
         elif self.start_result == self.StartResult.SUCCESS:
             return self.Status.STARTED
+        elif self.start_result == self.StartResult.ERROR:
+            return self.Status.ERROR
         elif self.is_stopped:
             return self.Status.STOPPED
         else:
@@ -297,6 +299,6 @@ class WatchChangesThread(threading.Thread):
         super().__init__(daemon=True)
 
     def run(self):
-        while True:
-            self.__kolibri_service_manager.wait_for_changes()
+        while self.__kolibri_service_manager.wait_for_changes():
             self.__callback()
+

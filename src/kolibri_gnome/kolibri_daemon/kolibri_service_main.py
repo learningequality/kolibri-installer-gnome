@@ -93,9 +93,9 @@ class KolibriServiceMainProcess(multiprocessing.Process):
             raise error
 
     def __kolibri_ready_cb(self, urls, bind_addr=None, bind_port=None):
-        self.__context.is_starting = False
-        self.__context.start_result = self.__context.StartResult.SUCCESS
         self.__context.base_url = urls[0]
+        self.__context.start_result = self.__context.StartResult.SUCCESS
+        self.__context.is_starting = False
 
     def __update_app_key(self):
         from kolibri.core.device.models import DeviceAppKey
