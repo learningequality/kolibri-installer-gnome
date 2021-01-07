@@ -24,7 +24,10 @@ from gi.repository import Gio
 
 from .. import config
 
-from ..globals import KOLIBRI_APP_DEVELOPER_EXTRAS, XDG_CURRENT_DESKTOP
+from ..globals import KOLIBRI_APP_DEVELOPER_EXTRAS
+from ..globals import KOLIBRI_USE_SYSTEM_INSTANCE
+from ..globals import XDG_CURRENT_DESKTOP
+
 from .utils import get_localized_file
 
 
@@ -269,10 +272,10 @@ class KolibriWindow(KolibriView):
 
 
 class KolibriDaemonProxy(object):
-    def __init__(self, application):
+    def __init__(self, application, bus_type):
         self.__application = application
         self.__proxy = Gio.DBusProxy.new_for_bus_sync(
-            Gio.BusType.SESSION,
+            bus_type,
             Gio.DBusProxyFlags.NONE,
             None,
             config.DAEMON_APPLICATION_ID,
@@ -295,22 +298,22 @@ class KolibriDaemonProxy(object):
     @property
     def app_key(self):
         variant = self.__proxy.get_cached_property("AppKey")
-        return variant.get_string()
+        return variant.get_string() if variant else None
 
     @property
     def base_url(self):
         variant = self.__proxy.get_cached_property("BaseURL")
-        return variant.get_string()
+        return variant.get_string() if variant else None
 
     @property
     def status(self):
         variant = self.__proxy.get_cached_property("Status")
-        return variant.get_string()
+        return variant.get_string() if variant else None
 
     @property
     def kolibri_home(self):
         variant = self.__proxy.get_cached_property("KolibriHome")
-        return variant.get_string()
+        return variant.get_string() if variant else None
 
     def hold(self):
         self.__proxy.call_sync("Hold", None, Gio.DBusCallFlags.NONE, -1, None)
@@ -347,7 +350,7 @@ class KolibriDaemonProxy(object):
         if callable(url):
             return True
 
-        if not url:
+        if not url or not self.base_url:
             return False
         elif not url.startswith(self.base_url):
             return False
@@ -384,7 +387,10 @@ class Application(pew.ui.PEWApp):
         )
         self.__loader_url = "file://{path}".format(path=os.path.abspath(loader_path))
 
-        self.__kolibri_service_manager = KolibriDaemonProxy(self)
+        if KOLIBRI_USE_SYSTEM_INSTANCE:
+            self.__kolibri_service_manager = KolibriDaemonProxy(self, Gio.BusType.SYSTEM)
+        else:
+            self.__kolibri_service_manager = KolibriDaemonProxy(self, Gio.BusType.SESSION)
 
         self.__windows = []
 
