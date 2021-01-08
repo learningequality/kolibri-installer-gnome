@@ -321,6 +321,9 @@ class KolibriDaemonProxy(object):
     def release(self):
         self.__proxy.call_sync("Release", None, Gio.DBusCallFlags.NONE, -1, None)
 
+    def start(self):
+        self.__proxy.call_sync("Start", None, Gio.DBusCallFlags.NONE, -1, None)
+
     def is_loading(self):
         if not self.app_key or not self.base_url:
             return True
@@ -442,6 +445,7 @@ class Application(pew.ui.PEWApp):
 
     def __open_window(self, target_url=None):
         self.__kolibri_service_manager.hold()
+        self.__kolibri_service_manager.start()
 
         target_url = target_url or self.__get_base_url
         window = KolibriWindow(

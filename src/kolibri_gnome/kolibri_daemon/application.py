@@ -22,19 +22,32 @@ class KolibriDaemon(DBusServer):
       <interface name="org.learningequality.Kolibri.Daemon">
         <method name="Hold" />
         <method name="Release" />
-        <property name="Status" type="s" access="read" />
-        <property name="BaseURL" type="s" access="read" />
+        <method name="Start" />
+        <method name="GetItemIdsForSearch">
+          <arg direction="in" type="s" name="search" />
+          <arg direction="out" type="as" name="item_ids" />
+        </method>
+        <method name="GetMetadataForItemIds">
+          <arg direction="in" type="as" name="item_ids" />
+          <arg direction="out" type="aa{sv}" name="metadata" />
+        </method>
         <property name="AppKey" type="s" access="read" />
+        <property name="BaseURL" type="s" access="read" />
         <property name="KolibriHome" type="s" access="read" />
+        <property name="Status" type="s" access="read" />
+        <property name="Version" type="d" access="read" />
       </interface>
     </node>
     """
 
+    VERSION = 1
+
     class Properties(NamedTuple):
-        Status: str
-        BaseURL: str
         AppKey: str
+        BaseURL: str
         KolibriHome: str
+        Status: str
+        Version: int
 
     def __init__(self, application, kolibri_service_manager):
         super().__init__(application)
@@ -49,10 +62,11 @@ class KolibriDaemon(DBusServer):
 
     def __update_cached_properties(self):
         new_properties = KolibriDaemon.Properties(
-            Status=self.__kolibri_service_manager.status.name or "",
-            BaseURL=self.__kolibri_service_manager.base_url or "",
             AppKey=self.__kolibri_service_manager.app_key or "",
+            BaseURL=self.__kolibri_service_manager.base_url or "",
             KolibriHome=self.__kolibri_service_manager.kolibri_home or "",
+            Status=self.__kolibri_service_manager.status.name or "",
+            Version=self.VERSION,
         )
 
         if new_properties != self.__cached_properties:
@@ -67,17 +81,29 @@ class KolibriDaemon(DBusServer):
     def Release(self, context, cancellable=None):
         self.__release_for_client(context.sender)
 
-    def GetStatus(self, context, cancellable=None):
-        return self.__cached_properties.Status
+    def Start(self, context, cancellable=None):
+        self.__kolibri_service_manager.start_kolibri()
 
-    def GetBaseURL(self, context, cancellable=None):
-        return self.__cached_properties.BaseURL
+    def GetItemIdsForSearch(self, search, context, cancellable=None):
+        return ["example"]
+
+    def GetMetadataForItemIds(self, item_ids, context, cancellable=None):
+        return [{"foo": GLib.Variant("s", "bar")}]
 
     def GetAppKey(self, context, cancellable=None):
         return self.__cached_properties.AppKey
 
+    def GetBaseURL(self, context, cancellable=None):
+        return self.__cached_properties.BaseURL
+
     def GetKolibriHome(self, context, cancellable=None):
         return self.__cached_properties.KolibriHome
+
+    def GetStatus(self, context, cancellable=None):
+        return self.__cached_properties.Status
+
+    def GetVersion(self, context, cancellable=None):
+        return self.__cached_properties.Version
 
     def __hold_for_client(self, connection, name):
         if name in self.__hold_clients.keys():
@@ -143,7 +169,6 @@ class Application(Gio.Application):
                 self.__on_system_name_acquired,
                 self.__on_system_name_lost
             )
-        self.__kolibri_service_manager.start_kolibri()
 
     def __on_system_name_acquired(self, connection, name):
         print("__on_system_name_acquired", name)
