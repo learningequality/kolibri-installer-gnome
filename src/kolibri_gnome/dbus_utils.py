@@ -134,15 +134,20 @@ class DBusServer(object):
         for interface in info.interfaces:
             for method in interface.methods:
                 method_fname = self.__fname(interface.name, method.name)
-                method_outargs = "".join([arg.signature for arg in method.out_args])
                 method_fn = getattr(self, method.name)
                 self.__methods[method_fname] = DBusMethodInfo(
-                    interface.name, method.name, method_outargs, method_fn
+                    interface_name=interface.name,
+                    method_name=method.name,
+                    method_outargs=self.__args_as_tuple(method.out_args),
+                    method_fn=method_fn
                 )
 
             for signal in interface.signals:
-                signal_args = "".join([arg.signature for arg in method.out_args])
-                signal_info = DBusSignalInfo(interface.name, signal.name, signal_args)
+                signal_info = DBusSignalInfo(
+                    interface_name=interface.name,
+                    signal_name=signal.name,
+                    signal_args=self.__args_as_tuple(signal.out_args)
+                )
                 signal_fn = partial(self.__emit_signal, signal_info, object_path)
                 setattr(self, signal.name, signal_fn)
 
@@ -151,7 +156,10 @@ class DBusServer(object):
                 property_type = property.signature
                 get_fn = getattr(self, "Get" + property.name, None)
                 self.__properties[property_fname] = DBusPropertyInfo(
-                    interface.name, property.name, property_type, get_fn
+                    interface_name=interface.name,
+                    property_name=property.name,
+                    property_type=property_type,
+                    get_fn=get_fn
                 )
 
             object_id = connection.register_object(
@@ -204,6 +212,14 @@ class DBusServer(object):
 
     def __fname(self, interface_name, method_name):
         return ".".join((interface_name, method_name))
+
+    def __args_as_tuple(self, out_args):
+        if not out_args:
+            return None
+        out_args_types = [
+            GLib.VariantType(arg.signature) for arg in out_args
+        ]
+        return GLib.VariantType.new_tuple(out_args_types).dup_string()
 
     def __on_method_call(
         self,
