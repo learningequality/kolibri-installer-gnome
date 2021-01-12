@@ -3,8 +3,8 @@
     "buildsystem": "simple",
     "build-commands": [
         "pip3 install --exists-action=i --no-index --find-links=\"file://${PWD}\" --prefix=${FLATPAK_DEST} kolibri",
-        "cp server.py /app/lib/python3.7/site-packages/kolibri/utils/server.py",
-        "cp cli.py /app/lib/python3.7/site-packages/kolibri/utils/cli.py"
+        "patch /app/lib/python3.7/site-packages/kolibri/utils/server.py server.py.diff",
+        "patch /app/lib/python3.7/site-packages/kolibri/utils/cli.py cli.py.diff"
     ],
     "sources": [
         {
@@ -14,11 +14,11 @@
         },
         {
             "type": "file",
-            "path": "server.py"
+            "path": "server.py.diff"
         },
         {
             "type": "file",
-            "path": "cli.py"
+            "path": "cli.py.diff"
         }
     ]
 }
