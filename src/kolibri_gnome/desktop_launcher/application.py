@@ -204,6 +204,21 @@ class KolibriWindow(KolibriView):
             _("Open in Browser"), handler=self.on_open_in_browser
         )
         self.__open_in_browser_menu_item.gio_action.set_enabled(False)
+
+        self.__back_menu_item = PEWMenuItem(
+            _("Back"),
+            handler=self.on_back,
+            shortcut=PEWShortcut("[", modifiers=["CTRL"]),
+        )
+        self.__back_menu_item.gio_action.set_enabled(False)
+
+        self.__forward_menu_item = PEWMenuItem(
+            _("Forward"),
+            handler=self.on_forward,
+            shortcut=PEWShortcut("]", modifiers=["CTRL"]),
+        )
+        self.__forward_menu_item.gio_action.set_enabled(False)
+
         menu_bar = self.build_menu_bar()
 
         super().__init__(*args, delegate=delegate, **kwargs)
@@ -252,16 +267,8 @@ class KolibriWindow(KolibriView):
         menu_bar.add_menu(view_menu)
 
         history_menu = pew.ui.PEWMenu(_("History"))
-        history_menu.add(
-            _("Back"),
-            handler=self.on_back,
-            shortcut=PEWShortcut("[", modifiers=["CTRL"]),
-        )
-        history_menu.add(
-            _("Forward"),
-            handler=self.on_forward,
-            shortcut=PEWShortcut("]", modifiers=["CTRL"]),
-        )
+        history_menu.add_item(self.__back_menu_item)
+        history_menu.add_item(self.__forward_menu_item)
         menu_bar.add_menu(history_menu)
 
         help_menu = pew.ui.PEWMenu(_("Help"))
@@ -317,6 +324,10 @@ class KolibriWindow(KolibriView):
             self.on_url_changed(url)
 
     def on_url_changed(self, url):
+        GLib.idle_add(
+            self.__update_history_buttons_source_func,
+            priority=GLib.PRIORITY_DEFAULT_IDLE,
+        )
         if urlsplit(url).scheme in ("http", "https"):
             self.__open_in_browser_menu_item.gio_action.set_enabled(True)
         else:
