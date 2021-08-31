@@ -6,6 +6,7 @@ import itertools
 
 from urllib.parse import urlencode
 from urllib.parse import urljoin
+from urllib.parse import urlsplit
 
 from gi.repository import Gio
 from gi.repository import GLib

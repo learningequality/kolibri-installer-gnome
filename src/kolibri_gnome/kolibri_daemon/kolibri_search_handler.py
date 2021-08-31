@@ -44,10 +44,13 @@ class SearchHandler(object):
         for URLs.
         """
 
+        node_id = node_data.get("id")
+        channel_id = node_data.get("channel_id")
+
         if node_data.get("kind") == "topic":
-            return "t/{}".format(node_data.get("id"))
+            return "t/{node_id}?{context}".format(node_id=node_id, context=channel_id)
         else:
-            return "c/{}".format(node_data.get("id"))
+            return "c/{node_id}?{context}".format(node_id=node_id, context=channel_id)
 
     @staticmethod
     def _item_id_to_node_id(item_id):
@@ -56,7 +59,8 @@ class SearchHandler(object):
         Raises ValueError if item_id is an invalid format.
         """
 
-        _kind_code, node_id = item_id.split("/", 1)
+        _kind_code, _sep, node_id_and_context = item_id.partition("/")
+        node_id, _sep, _context = node_id_and_context.partition("?")
         return node_id
 
     @staticmethod

@@ -6,6 +6,7 @@ import gi
 import subprocess
 
 from urllib.parse import urlsplit
+from urllib.parse import urlunparse
 from gi.repository import Gio
 
 from .. import config
@@ -27,12 +28,38 @@ class Launcher(Gio.Application):
             self.handle_uri(uri)
 
     def handle_uri(self, uri):
-        valid_url_schemes = ("kolibri-channel", )
+        valid_url_schemes = ("kolibri-channel", 'x-kolibri-dispatch')
 
         url_tuple = urlsplit(uri)
-        if url_tuple.scheme not in valid_url_schemes:
+
+        if url_tuple.scheme == 'kolibri-channel':
+            channel_id = url_tuple.path.strip('/')
+            node_path = None
+            node_query = None
+        elif url_tuple.scheme == 'x-kolibri-dispatch':
+            channel_id = url_tuple.netloc
+            node_path = url_tuple.path
+            node_query = url_tuple.query
+        else:
             logger.info(f"Invalid URL scheme: {uri}")
             return
 
-        channel_id = url_tuple.path
-        subprocess.Popen(["kolibri-gnome", "--channel-id", channel_id])
+        kolibri_gnome_args = []
+
+        # Don't include search context for channel-specific URIs, because
+        # it causes Kolibri to add a Close button which leads outside the
+        # channel.
+        # TODO: Implement channel-specific search endpoints in Kolibri and
+        #       remove this special case.
+        if channel_id:
+            node_query = None
+
+        if channel_id and channel_id != "_":
+            kolibri_gnome_args.extend(["--channel-id", channel_id])
+
+        if node_path or node_query:
+            kolibri_node_url = urlunparse(("kolibri", node_path, '', None, node_query, None))
+            kolibri_gnome_args.append(kolibri_node_url)
+
+        subprocess.Popen(["kolibri-gnome", *kolibri_gnome_args])
+
