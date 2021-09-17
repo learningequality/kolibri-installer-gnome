@@ -26,13 +26,15 @@ common_dependencies = [
     gobject_dep
 ]
 
+shell_search_provider_dbus_sources = gnome.gdbus_codegen(
+    'shell-search-provider-dbus',
+    sources: 'org.gnome.Shell.SearchProvider2.xml',
+    interface_prefix: 'org.gnome.'
+)
+
 shell_search_provider_dbus_lib = static_library(
     'shell_search_provider_dbus',
-    sources: gnome.gdbus_codegen(
-        'shell-search-provider-dbus',
-        sources: 'org.gnome.Shell.SearchProvider2.xml',
-        interface_prefix: 'org.gnome.'
-    ),
+    sources: shell_search_provider_dbus_sources,
     dependencies: common_dependencies,
     include_directories: include_directories('.')
 )
@@ -43,13 +45,15 @@ shell_search_provider_dbus_lib_dep = declare_dependency(
     include_directories: include_directories('.')
 )
 
+kolibri_daemon_dbus_sources = gnome.gdbus_codegen(
+    'kolibri-daemon-dbus',
+    sources: 'org.learningequality.Kolibri.Daemon.xml',
+    interface_prefix: 'org.learningequality.'
+)
+
 kolibri_daemon_dbus_lib = static_library(
     'kolibri_daemon_dbus',
-    sources: gnome.gdbus_codegen(
-        'kolibri-daemon-dbus',
-        sources: 'org.learningequality.Kolibri.Daemon.xml',
-        interface_prefix: 'org.learningequality.'
-    ),
+    sources: kolibri_daemon_dbus_sources,
     dependencies: common_dependencies,
     include_directories: include_directories('.')
 )
@@ -73,7 +77,7 @@ executable(
         'kolibri-gnome-search-provider-application.c',
         'kolibri-gnome-search-provider-main.c',
         'kolibri-utils.c'
-    ],
+    ] + kolibri_daemon_dbus_sources + shell_search_provider_dbus_sources,
     dependencies: search_provider_dependencies,
     install: true,
     install_dir: kolibri_gnome_libexecdir
