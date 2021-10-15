@@ -1,13 +1,10 @@
-from typing import NamedTuple
-
 from gi.repository import Gio
 from gi.repository import GLib
+from gi.repository import KolibriDaemonDBus
 
 from kolibri_app.config import DAEMON_APPLICATION_ID
-from kolibri_app.config import DAEMON_OBJECT_PATH
+from kolibri_app.config import DAEMON_MAIN_OBJECT_PATH
 
-from .dbus_utils import DBusServer
-from .dbus_utils import dict_to_vardict
 from .kolibri_search_handler import LocalSearchHandler
 from .kolibri_service import KolibriServiceManager
 
@@ -17,159 +14,9 @@ INACTIVITY_TIMEOUT_MS = 30 * 1000  # 30 seconds in milliseconds
 DEFAULT_STOP_KOLIBRI_TIMEOUT_SECONDS = 60  # 1 minute in seconds
 
 
-class KolibriDaemon(DBusServer):
-    INTERFACE_XML = """
-    <!DOCTYPE node PUBLIC
-     '-//freedesktop//DTD D-BUS Object Introspection 1.0//EN'
-     'http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd'>
-    <node>
-      <interface name="org.learningequality.Kolibri.Daemon">
-        <method name="Hold" />
-        <method name="Release" />
-        <method name="Start" />
-        <method name="Stop" />
-        <method name="GetItemIdsForSearch">
-          <arg direction="in" type="s" name="search" />
-          <arg direction="out" type="as" name="item_ids" />
-        </method>
-        <method name="GetMetadataForItemIds">
-          <arg direction="in" type="as" name="item_ids" />
-          <arg direction="out" type="aa{sv}" name="metadata" />
-        </method>
-        <property name="AppKey" type="s" access="read" />
-        <property name="BaseURL" type="s" access="read" />
-        <property name="KolibriHome" type="s" access="read" />
-        <property name="Status" type="s" access="read" />
-        <property name="Version" type="u" access="read" />
-      </interface>
-    </node>
-    """
-
+class Application(Gio.Application):
     VERSION = 1
 
-    class Properties(NamedTuple):
-        AppKey: str
-        BaseURL: str
-        KolibriHome: str
-        Status: str
-        Version: int
-
-    def __init__(self, application, service_manager, search_handler):
-        super().__init__(application)
-        self.__service_manager = service_manager
-        self.__search_handler = search_handler
-        self.__hold_clients = dict()
-        self.__cached_properties = None
-        self.__watch_changes_timeout_source = None
-
-    def register_on_connection(self, *args):
-        super().register_on_connection(*args)
-        self.__update_cached_properties()
-        self.__begin_watch_changes_timeout()
-
-    def unregister_on_connection(self, *args):
-        self.__cancel_watch_changes_timeout()
-        super().unregister_on_connection(*args)
-
-    @property
-    def clients_count(self):
-        return len(self.__hold_clients)
-
-    def Hold(self, context, cancellable=None):
-        self.__hold_for_client(context.connection, context.sender)
-
-    def Release(self, context, cancellable=None):
-        self.__release_for_client(context.sender)
-
-    def Start(self, context, cancellable=None):
-        self.__service_manager.start_kolibri()
-
-    def Stop(self, context, cancellable=None):
-        self.__service_manager.stop_kolibri()
-
-    def GetItemIdsForSearch(self, search, context, cancellable=None):
-        return self.__search_handler.get_item_ids_for_search(search)
-
-    def GetMetadataForItemIds(self, item_ids, context, cancellable=None):
-        return list(
-            map(
-                dict_to_vardict,
-                self.__search_handler.get_metadata_for_item_ids(item_ids),
-            )
-        )
-
-    def GetAppKey(self, context, cancellable=None):
-        return self.__cached_properties.AppKey
-
-    def GetBaseURL(self, context, cancellable=None):
-        return self.__cached_properties.BaseURL
-
-    def GetKolibriHome(self, context, cancellable=None):
-        return self.__cached_properties.KolibriHome
-
-    def GetStatus(self, context, cancellable=None):
-        return self.__cached_properties.Status
-
-    def GetVersion(self, context, cancellable=None):
-        return self.__cached_properties.Version
-
-    def __hold_for_client(self, connection, name):
-        if name in self.__hold_clients.keys():
-            return
-
-        watch_id = Gio.bus_watch_name_on_connection(
-            connection,
-            name,
-            Gio.BusNameWatcherFlags.NONE,
-            None,
-            self.__on_hold_client_vanished,
-        )
-        self.__hold_clients[name] = watch_id
-
-    def __release_for_client(self, name):
-        if name not in self.__hold_clients.keys():
-            return
-
-        watch_id = self.__hold_clients.pop(name)
-        Gio.bus_unwatch_name(watch_id)
-
-    def __on_hold_client_vanished(self, connection, name):
-        self.__release_for_client(name)
-
-    def __begin_watch_changes_timeout(self):
-        if self.__watch_changes_timeout_source:
-            return
-        self.__watch_changes_timeout_source = GLib.timeout_add_seconds(
-            1, self.__watch_changes_timeout_cb
-        )
-
-    def __cancel_watch_changes_timeout(self):
-        if self.__watch_changes_timeout_source:
-            GLib.source_remove(self.__watch_changes_timeout_source)
-            self.__watch_changes_timeout_source = None
-
-    def __watch_changes_timeout_cb(self):
-        if self.__service_manager.pop_has_changes():
-            self.__update_cached_properties()
-        return GLib.SOURCE_CONTINUE
-
-    def __update_cached_properties(self):
-        new_properties = KolibriDaemon.Properties(
-            AppKey=self.__service_manager.app_key or "",
-            BaseURL=self.__service_manager.base_url or "",
-            KolibriHome=self.__service_manager.kolibri_home or "",
-            Status=self.__service_manager.status.name or "",
-            Version=self.VERSION,
-        )
-
-        if new_properties != self.__cached_properties:
-            self.__cached_properties = new_properties
-            self.notify_properties_changed(
-                "org.learningequality.Kolibri.Daemon", new_properties._asdict()
-            )
-
-
-class Application(Gio.Application):
     def __init__(self, *args, **kwargs):
         super().__init__(
             *args,
@@ -216,11 +63,41 @@ class Application(Gio.Application):
         self.__kolibri_search_handler = LocalSearchHandler()
         self.__kolibri_search_handler.init()
 
-        self.__session_kolibri_daemon = None
-        self.__system_kolibri_daemon = None
+        self.__watch_changes_timeout_source = None
+
+        self.__public_dbus_interface = KolibriDaemonDBus.MainSkeleton()
+
+        self.__public_dbus_interface.connect(
+            "handle-hold", self.__on_public_dbus_interface_handle_hold
+        )
+
+        self.__public_dbus_interface.connect(
+            "handle-release", self.__on_public_dbus_interface_handle_release
+        )
+
+        self.__public_dbus_interface.connect(
+            "handle-start", self.__on_public_dbus_interface_handle_start
+        )
+
+        self.__public_dbus_interface.connect(
+            "handle-stop", self.__on_public_dbus_interface_handle_stop
+        )
+
+        self.__public_dbus_interface.connect(
+            "handle-get-item-ids-for-search",
+            self.__on_public_dbus_interface_handle_get_item_ids_for_search,
+        )
+
+        self.__public_dbus_interface.connect(
+            "handle-get-metadata-for-item-ids",
+            self.__on_public_dbus_interface_handle_get_metadata_for_item_ids,
+        )
+
         self.__system_name_id = 0
 
+        self.__hold_clients = dict()
         self.__has_hold_for_kolibri_service = False
+
         self.__auto_stop_timeout_source = None
         self.__stop_kolibri_timeout_source = None
         self.__stop_kolibri_timeout_interval = DEFAULT_STOP_KOLIBRI_TIMEOUT_SECONDS
@@ -235,25 +112,120 @@ class Application(Gio.Application):
 
     @property
     def clients_count(self):
-        count = 0
-        if self.__session_kolibri_daemon:
-            count += self.__session_kolibri_daemon.clients_count
-        if self.__system_kolibri_daemon:
-            count += self.__system_kolibri_daemon.clients_count
-        return count
+        return len(self.__hold_clients)
+
+    def __begin_watch_changes_timeout(self):
+        if self.__watch_changes_timeout_source:
+            return
+        self.__watch_changes_timeout_source = GLib.timeout_add_seconds(
+            1, self.__watch_changes_timeout_cb
+        )
+
+    def __cancel_watch_changes_timeout(self):
+        if self.__watch_changes_timeout_source:
+            GLib.source_remove(self.__watch_changes_timeout_source)
+            self.__watch_changes_timeout_source = None
+
+    def __watch_changes_timeout_cb(self):
+        if self.__service_manager.pop_has_changes():
+            self.__update_cached_properties()
+        return GLib.SOURCE_CONTINUE
+
+    def __update_cached_properties(self):
+        self.__public_dbus_interface.props.app_key = self.__service_manager.app_key
+        self.__public_dbus_interface.props.base_url = self.__service_manager.base_url
+        self.__public_dbus_interface.props.kolibri_home = (
+            self.__service_manager.kolibri_home
+        )
+        self.__public_dbus_interface.props.status = self.__service_manager.status.name
+        self.__public_dbus_interface.props.version = self.VERSION
+
+    def __on_public_dbus_interface_handle_hold(self, interface, invocation):
+        self.__reset_inactivity_timeout()
+        self.__hold_for_client(invocation.get_connection(), invocation.get_sender())
+        interface.complete_hold(invocation)
+        return True
+
+    def __on_public_dbus_interface_handle_release(self, interface, invocation):
+        self.__reset_inactivity_timeout()
+        self.__release_for_client(invocation.get_sender())
+        interface.complete_release(invocation)
+        return True
+
+    def __on_public_dbus_interface_handle_start(self, interface, invocation):
+        self.__reset_inactivity_timeout()
+        self.__service_manager.start_kolibri()
+        interface.complete_start(invocation)
+        return True
+
+    def __on_public_dbus_interface_handle_stop(self, interface, invocation):
+        self.__reset_inactivity_timeout()
+        self.__service_manager.stop_kolibri()
+        interface.complete_stop(invocation)
+        return True
+
+    def __on_public_dbus_interface_handle_get_item_ids_for_search(
+        self, interface, invocation, search
+    ):
+        self.__reset_inactivity_timeout()
+        item_ids = self.__kolibri_search_handler.get_item_ids_for_search(search)
+        # Using interface.complete_get_item_ids_for_search results in
+        # `TypeError: Must be string, not list`, so instead we will return a
+        # Variant manually...
+        result_variant = GLib.Variant.new_tuple(GLib.Variant.new_strv(item_ids))
+        invocation.return_value(result_variant)
+        return True
+
+    def __on_public_dbus_interface_handle_get_metadata_for_item_ids(
+        self, interface, invocation, item_ids
+    ):
+        self.__reset_inactivity_timeout()
+        metadata_list = self.__kolibri_search_handler.get_metadata_for_item_ids(
+            item_ids
+        )
+        result_variant = GLib.Variant(
+            "aa{sv}", list(map(dict_to_vardict, metadata_list))
+        )
+        interface.complete_get_metadata_for_item_ids(invocation, result_variant)
+        return True
+
+    def __reset_inactivity_timeout(self):
+        self.hold()
+        self.release()
+
+    def __hold_for_client(self, connection, name):
+        if name in self.__hold_clients.keys():
+            return
+
+        watch_id = Gio.bus_watch_name_on_connection(
+            connection,
+            name,
+            Gio.BusNameWatcherFlags.NONE,
+            None,
+            self.__on_hold_client_vanished,
+        )
+        self.__hold_clients[name] = watch_id
+
+    def __release_for_client(self, name):
+        try:
+            watch_id = self.__hold_clients.pop(name)
+        except KeyError:
+            pass
+        else:
+            Gio.bus_unwatch_name(watch_id)
+
+    def __on_hold_client_vanished(self, connection, name):
+        self.__release_for_client(name)
 
     def do_dbus_register(self, connection, object_path):
         if self.use_session_bus:
-            self.__session_kolibri_daemon = self.__create_kolibri_daemon()
-            self.__session_kolibri_daemon.register_on_connection(
-                connection, DAEMON_OBJECT_PATH
-            )
+            self.__public_dbus_interface.export(connection, DAEMON_MAIN_OBJECT_PATH)
+        self.__begin_watch_changes_timeout()
         return True
 
     def do_dbus_unregister(self, connection, object_path):
-        if self.__session_kolibri_daemon:
-            self.__session_kolibri_daemon.unregister_on_connection(connection)
-            self.__session_kolibri_daemon = None
+        self.__public_dbus_interface.unexport_from_connection(connection)
+        self.__cancel_watch_changes_timeout()
         return True
 
     def do_name_lost(self):
@@ -302,10 +274,7 @@ class Application(Gio.Application):
 
     def __system_bus_on_get(self, source, result):
         connection = Gio.bus_get_finish(result)
-        self.__system_kolibri_daemon = self.__create_kolibri_daemon()
-        self.__system_kolibri_daemon.register_on_connection(
-            connection, DAEMON_OBJECT_PATH
-        )
+        self.__public_dbus_interface.export(connection, DAEMON_MAIN_OBJECT_PATH)
         self.__system_name_id = Gio.bus_own_name_on_connection(
             connection,
             DAEMON_APPLICATION_ID,
@@ -318,12 +287,10 @@ class Application(Gio.Application):
         pass
 
     def __on_system_name_lost(self, connection, name):
-        if self.__system_kolibri_daemon:
-            self.__system_kolibri_daemon.unregister_on_connection(connection)
-            self.__system_kolibri_daemon = None
+        self.__public_dbus_interface.unexport_from_connection(connection)
 
     def __create_kolibri_daemon(self):
-        return KolibriDaemon(
+        return KolibriDaemonPublicServer(
             self, self.__service_manager, self.__kolibri_search_handler
         )
 
