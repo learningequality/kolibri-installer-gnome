@@ -1,9 +1,12 @@
+from uuid import uuid4
+
 from gi.repository import Gio
 from gi.repository import GLib
 from gi.repository import KolibriDaemonDBus
 
 from kolibri_app.config import DAEMON_APPLICATION_ID
 from kolibri_app.config import DAEMON_MAIN_OBJECT_PATH
+from kolibri_app.config import DAEMON_PRIVATE_OBJECT_PATH
 
 from .kolibri_search_handler import LocalSearchHandler
 from .kolibri_service import KolibriServiceManager
@@ -13,6 +16,16 @@ from .utils import dict_to_vardict
 INACTIVITY_TIMEOUT_MS = 30 * 1000  # 30 seconds in milliseconds
 
 DEFAULT_STOP_KOLIBRI_TIMEOUT_SECONDS = 60  # 1 minute in seconds
+
+
+class DBusServiceProxy(Gio.DBusProxy):
+    def __init__(self, connection):
+        super().__init__(
+            g_connection=connection,
+            g_name="org.freedesktop.DBus",
+            g_object_path="/org/freedesktop/DBus",
+            g_interface_name="org.freedesktop.DBus"
+        )
 
 
 class PublicDBusInterface(object):
@@ -137,6 +150,20 @@ class PublicDBusInterface(object):
         interface.complete_stop(invocation)
         return True
 
+    @staticmethod
+    def __get_invocation_user_id(invocation):
+        # FIXME: Make this asynchronous
+        sender = invocation.get_sender()
+        dbus_proxy = DBusServiceProxy(invocation.get_connection())
+        return dbus_proxy.GetConnectionUnixUser("(s)", sender)
+
+    def __on_handle_get_user_token(self, interface, invocation):
+        self.__application.reset_inactivity_timeout()
+        user_id = self.__get_invocation_user_id(invocation)
+        secret_token = self.__application.generate_user_token(user_id)
+        interface.complete_get_user_token(invocation, secret_token)
+        return True
+
     def __on_handle_get_item_ids_for_search(
         self, interface, invocation, search
     ):
@@ -239,6 +266,37 @@ class PublicDBusInterface(object):
         return GLib.SOURCE_REMOVE
 
 
+class PrivateDBusInterface(object):
+    def __init__(self, application):
+        self.__application = application
+
+        self.__skeleton = KolibriDaemonDBus.PrivateSkeleton()
+        self.__skeleton.connect(
+            "handle-check-user-token", self.__on_check_user_token
+        )
+
+    def init(self):
+        pass
+
+    def shutdown(self):
+        pass
+
+    def export(self, connection, object_path):
+        return self.__skeleton.export(connection, object_path)
+
+    def unexport(self, connection):
+        self.__skeleton.unexport_from_connection(connection)
+
+    def __on_check_user_token(self, interface, invocation, token):
+        self.__application.reset_inactivity_timeout()
+        details = self.__application.check_user_token(token)
+        result_variant = GLib.Variant(
+            "a{sv}", dict_to_vardict(details)
+        )
+        interface.complete_check_user_token(invocation, result_variant)
+        return True
+
+
 class Application(Gio.Application):
     def __init__(self, *args, **kwargs):
         super().__init__(
@@ -284,7 +342,11 @@ class Application(Gio.Application):
         self.__public_interface = PublicDBusInterface(self)
         self.__public_interface.init()
 
+        self.__private_interface = PrivateDBusInterface(self)
+        self.__private_interface.init()
+
         self.__hold_tokens = set()
+        self.__user_tokens = dict()
 
         self.__system_name_id = 0
 
@@ -310,13 +372,26 @@ class Application(Gio.Application):
             self.__hold_tokens.remove(token)
             self.release()
 
+    def generate_user_token(self, user):
+        # TODO: Expire the token
+        # TODO: Get user details here
+        token = uuid4().hex
+        self.__user_tokens[token] = {'user_id': str(user)}
+        return token
+
+    def check_user_token(self, token):
+        # TODO: Should we remove the token immediately like this?
+        return self.__user_tokens.pop(token, {})
+
     def do_dbus_register(self, connection, object_path):
         if self.use_session_bus:
             self.__public_interface.export(connection, DAEMON_MAIN_OBJECT_PATH)
+        self.__private_interface.export(connection, DAEMON_PRIVATE_OBJECT_PATH)
         return True
 
     def do_dbus_unregister(self, connection, object_path):
         self.__public_interface.unexport(connection)
+        self.__private_interface.unexport(connection)
         return True
 
     def do_name_lost(self):
@@ -355,6 +430,7 @@ class Application(Gio.Application):
             self.__system_name_id = 0
 
         self.__public_interface.shutdown()
+        self.__private_interface.shutdown()
 
         Gio.Application.do_shutdown(self)
 
@@ -374,3 +450,4 @@ class Application(Gio.Application):
 
     def __on_system_name_lost(self, connection, name):
         self.__public_interface.unexport(connection)
+        self.__private_interface.unexport(connection)
