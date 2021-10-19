@@ -16,10 +16,10 @@ python_installation.install_sources(
     subdir: 'kolibri_daemon'
 )
 
-configure_file(
-    input: 'kolibri-daemon.in',
-    output: 'kolibri-daemon',
-    configuration: kolibri_app_config,
+kolibri_daemon = executable(
+    'kolibri-daemon',
+    sources: ['kolibri-daemon.c'],
+    dependencies: [c_config_dep, glib_dep],
     install: true,
     install_dir: kolibri_app_libexecdir,
     install_mode: 'rwxr-xr-x'

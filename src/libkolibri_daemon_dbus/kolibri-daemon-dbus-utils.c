@@ -92,7 +92,7 @@ local_kolibri_exists(void)
 static gboolean
 getenv_boolean(const gchar *name)
 {
-  const gchar *value = g_getenv(PROFILE_ENV_PREFIX "USE_SYSTEM_INSTANCE");
+  const gchar *value = g_getenv(KOLIBRI_ENV_PREFIX "USE_SYSTEM_INSTANCE");
   return value != NULL && value[0] != '\0';
 }
 
@@ -109,8 +109,8 @@ getenv_boolean(const gchar *name)
 GBusType
 kolibri_daemon_get_default_bus_type(void)
 {
-  gboolean use_system_instance = getenv_boolean(PROFILE_ENV_PREFIX "USE_SYSTEM_INSTANCE");
-  gboolean force_use_system_instance = getenv_boolean(PROFILE_ENV_PREFIX "FORCE_USE_SYSTEM_INSTANCE");
+  gboolean use_system_instance = getenv_boolean(KOLIBRI_ENV_PREFIX "USE_SYSTEM_INSTANCE");
+  gboolean force_use_system_instance = getenv_boolean(KOLIBRI_ENV_PREFIX "FORCE_USE_SYSTEM_INSTANCE");
 
   if (force_use_system_instance)
     {

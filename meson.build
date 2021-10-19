@@ -22,9 +22,11 @@ build_profile = get_option('profile')
 if build_profile == 'default'
     base_application_id = 'org.learningequality.Kolibri'
     base_object_path = '/org/learningequality/Kolibri'
+    kolibri_env_prefix = 'KOLIBRI_'
 elif build_profile == 'development'
     base_application_id = 'org.learningequality.Kolibri.Devel'
     base_object_path = '/org/learningequality/Kolibri/Devel'
+    kolibri_env_prefix = 'KOLIBRI_DEVEL_'
 endif
 
 frontend_application_id = base_application_id
@@ -49,11 +51,11 @@ kolibri_app_datadir = join_paths(datadir, 'kolibri-app')
 
 kolibri_app_config = configuration_data()
 kolibri_app_config.set('BINDIR', bindir)
-kolibri_app_config.set('PYTHON', 'python3')
 kolibri_app_config.set('PACKAGE_STRING', package_string)
 kolibri_app_config.set('GETTEXT_PACKAGE', meson.project_name())
 kolibri_app_config.set('LOCALE_DIR', locale_dir)
 kolibri_app_config.set('BUILD_PROFILE', build_profile)
+kolibri_app_config.set('KOLIBRI_ENV_PREFIX', kolibri_env_prefix)
 kolibri_app_config.set('KOLIBRI_APP_LIBEXECDIR', kolibri_app_libexecdir)
 kolibri_app_config.set('KOLIBRI_APP_DATADIR', kolibri_app_datadir)
 kolibri_app_config.set('KOLIBRI_HOME_TEMPLATE_DIR', kolibri_home_template_dir)

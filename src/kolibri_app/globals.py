@@ -10,13 +10,8 @@ from pathlib import Path
 
 from . import config
 
-if config.BUILD_PROFILE == "development":
-    profile_environ_prefix = "KOLIBRI_DEVEL_"
-else:
-    profile_environ_prefix = "KOLIBRI_"
-
 KOLIBRI_APP_DEVELOPER_EXTRAS = os.environ.get(
-    profile_environ_prefix + "APP_DEVELOPER_EXTRAS"
+    config.KOLIBRI_ENV_PREFIX + "APP_DEVELOPER_EXTRAS"
 )
 
 XDG_CURRENT_DESKTOP = os.environ.get("XDG_CURRENT_DESKTOP")

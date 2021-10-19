@@ -11,10 +11,17 @@ python_installation.install_sources(
     subdir: 'kolibri_gnome'
 )
 
-configure_file(
+kolibri_gnome = configure_file(
     input: 'kolibri-gnome.in',
+    output: 'kolibri-gnome.out',
+    configuration: kolibri_app_config
+)
+
+custom_target(
+    'kolibri-gnome',
+    input: kolibri_gnome,
     output: 'kolibri-gnome',
-    configuration: kolibri_app_config,
+    command: ['cp', '@INPUT@', '@OUTPUT@'],
     install: true,
     install_dir: bindir,
     install_mode: 'rwxr-xr-x'
