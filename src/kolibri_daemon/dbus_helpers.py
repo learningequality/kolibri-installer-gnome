@@ -1,27 +1,39 @@
 from __future__ import annotations
 
+from concurrent.futures import Future
+
 from gi.repository import Gio
+from gi.repository import GLib
+
+from .utils import async_init_result_to_future
+from .utils import async_result_to_future
 
 
 class DBusManagerProxy(Gio.DBusProxy):
-    def __init__(self, connection):
-        super().__init__(
+    @classmethod
+    def get_default(cls, connection: Gio.DBusConnection):
+        return cls(
             g_connection=connection,
             g_name="org.freedesktop.DBus",
             g_object_path="/org/freedesktop/DBus",
             g_interface_name="org.freedesktop.DBus",
         )
 
+    def init_future(self):
+        future = Future()
+        self.init_async(
+            GLib.PRIORITY_DEFAULT, None, async_init_result_to_future, future
+        )
+        return future
 
-def get_user_id_for_dbus_invocation(
-    invocation: Gio.DBusMethodInvocation, **kwargs
-) -> str:
-    sender = invocation.get_sender()
-    connection = invocation.get_connection()
-    dbus_manager = DBusManagerProxy(connection)
-    dbus_manager.init()
-    user_id = dbus_manager.GetConnectionUnixUser("(s)", sender, **kwargs)
-    if user_id:
-        return int(user_id)
-    else:
-        return None
+    def get_user_id_from_dbus_invocation_future(
+        self, invocation: Gio.DBusMethodInvocation
+    ) -> Future:
+        future = Future()
+        self.GetConnectionUnixUser(
+            "(s)",
+            invocation.get_sender(),
+            result_handler=async_result_to_future,
+            user_data=future,
+        )
+        return future
