@@ -99,7 +99,7 @@ class KolibriView(pew.ui.WebUIView, MenuEventHandler):
     """
 
     __target_url: str = None
-    __was_target_url_ever_loaded: bool = False
+    __was_kolibri_started: bool = False
 
     def __init__(self, name: str, url: str = None, **kwargs):
         self.__target_url = url
@@ -137,15 +137,16 @@ class KolibriView(pew.ui.WebUIView, MenuEventHandler):
 
         super().load_url(url_to_load)
 
-        if self.kolibri_daemon.is_started() and not self.__was_target_url_ever_loaded:
+        if self.kolibri_daemon.is_started() and not self.__was_kolibri_started:
             self.present_window()
-            self.__was_target_url_ever_loaded = True
+            self.__was_kolibri_started = True
+            self.on_kolibri_started()
 
     def get_current_or_target_url(self) -> str:
-        if self.kolibri_daemon.is_started() and self.__was_target_url_ever_loaded:
+        if self.__was_kolibri_started:
             return self.get_url()
         else:
-            return self.__target_url
+            return self.delegate.get_full_url(self.__target_url)
 
     def open_window(self):
         self.delegate.open_window(None)
