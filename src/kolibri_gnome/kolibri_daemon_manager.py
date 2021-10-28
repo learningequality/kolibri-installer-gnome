@@ -18,6 +18,10 @@ from kolibri_app.config import DAEMON_APPLICATION_ID
 from kolibri_app.config import DAEMON_MAIN_OBJECT_PATH
 
 
+AUTOLOGIN_URL_TEMPLATE = "kolibri_desktop_auth_plugin/login/{token}?{query}"
+INITIALIZE_URL_TEMPLATE = "app/api/initialize/{key}?{query}"
+
+
 class KolibriDaemonManager(object):
     __on_change_cb: callable = None
 
@@ -27,6 +31,7 @@ class KolibriDaemonManager(object):
     __starting_kolibri: bool = False
     __dbus_proxy_has_error: bool = None
     __dbus_proxy_owner: bool = None
+    __login_token: str = None
 
     def __init__(self, on_change_cb: callable):
         self.__on_change_cb = on_change_cb
@@ -56,10 +61,12 @@ class KolibriDaemonManager(object):
                 )
 
     def is_started(self) -> bool:
-        if self.__dbus_proxy.props.app_key and self.__dbus_proxy.props.base_url:
-            return self.__dbus_proxy.props.status in ["STARTED"]
-        else:
-            return False
+        return (
+            self.__dbus_proxy.props.app_key
+            and self.__dbus_proxy.props.base_url
+            and self.__login_token is not None
+            and self.__dbus_proxy.props.status == "STARTED"
+        )
 
     def is_loading(self) -> bool:
         return not self.is_started()
@@ -91,8 +98,13 @@ class KolibriDaemonManager(object):
             return None
 
     def get_kolibri_initialize_url(self, next_url: str) -> str:
-        initialize_url = "app/api/initialize/{key}?{query}".format(
-            key=self.__dbus_proxy.props.app_key, query=urlencode({"next": next_url})
+        autologin_url = self.get_kolibri_url(
+            AUTOLOGIN_URL_TEMPLATE.format(
+                token=self.__login_token, query=urlencode({"next": next_url})
+            )
+        )
+        initialize_url = INITIALIZE_URL_TEMPLATE.format(
+            key=self.__dbus_proxy.props.app_key, query=urlencode({"next": autologin_url})
         )
         return self.get_kolibri_url(initialize_url)
 
@@ -127,7 +139,23 @@ class KolibriDaemonManager(object):
         else:
             self.__dbus_proxy_has_error = False
             self.__dbus_proxy.connect("notify", self.__dbus_proxy_on_notify)
+            self.__dbus_proxy.call_get_login_token(
+                callback=self.__dbus_proxy_login_token_result_handler
+            )
             self.__dbus_proxy_on_notify(self.__dbus_proxy, None)
+
+    def __dbus_proxy_login_token_result_handler(
+        self, dbus_proxy: KolibriDaemonDBus.MainProxy, result: Gio.AsyncResult
+    ):
+        if isinstance(result, Exception):
+            logging.warning(
+                "Error communicating with Kolibri daemon: {}".format(result)
+            )
+            self.__dbus_proxy_has_error = True
+        else:
+            self.__dbus_proxy_has_error = False
+        self.__login_token = self.__dbus_proxy.call_get_login_token_finish(result)
+        self.__on_dbus_proxy_changed()
 
     def __dbus_proxy_on_notify(
         self, dbus_proxy: KolibriDaemonDBus.MainProxy, param_spec: GObject.ParamSpec
