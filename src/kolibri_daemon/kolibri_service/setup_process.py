@@ -99,7 +99,12 @@ class SetupProcess(KolibriServiceProcess):
             options.setdefault("preset", "nonformal")
             options.setdefault("language_id", None)
             options.setdefault("facility_settings", {})
+            options["facility_settings"].setdefault("learner_can_edit_username", False)
+            options["facility_settings"].setdefault("learner_can_edit_name", False)
+            options["facility_settings"].setdefault("learner_can_edit_password", False)
+            options["facility_settings"].setdefault("learner_can_sign_up", False)
             options.setdefault("device_settings", {})
+            options["device_settings"].setdefault("allow_guest_access", False)
             call_command("provisiondevice", interactive=False, **options)
 
     def __run_kolibri_command(self, *args) -> bool:
