@@ -26,11 +26,39 @@ from .kolibri_window import KolibriWindow
 
 logger = logging.getLogger(__name__)
 
+# TODO: Share brand colours with Kolibri itself.
+#       <https://github.com/learningequality/kolibri/blob/develop/kolibri/plugins/default_theme/kolibri_plugin.py>
+
+KOLIBRI_BRAND_V50 = "#f0e7ed"
+KOLIBRI_BRAND_V100 = "#dbc3d4"
+KOLIBRI_BRAND_V200 = "#c59db9"
+KOLIBRI_BRAND_V300 = "#ac799d"
+KOLIBRI_BRAND_V400 = "#996189"
+KOLIBRI_BRAND_V500 = "#874e77"
+KOLIBRI_BRAND_V600 = "#7c4870"
+KOLIBRI_BRAND_V700 = "#6e4167"
+KOLIBRI_BRAND_V800 = "#5f3b5c"
+KOLIBRI_BRAND_V900 = "#4b2e4d"
+KOLIBRI_BRAND_FG = "#ffffff"
+
+KOLIBRI_CHANNEL_V400 = "#212121"
+KOLIBRI_CHANNEL_V300 = "#2a2a2a"
+KOLIBRI_CHANNEL_FG = "#ffffff"
+
 
 class Application(Adw.Application):
     __context: KolibriContext
 
     application_name = GObject.Property(type=str, default=_("Kolibri"))
+
+    CSS_OVERRIDE: str = (
+        f"@define-color headerbar_bg_color {KOLIBRI_BRAND_V400};\n"
+        f"@define-color headerbar_fg_color {KOLIBRI_BRAND_FG};\n"
+        f"@define-color headerbar_border_color {KOLIBRI_BRAND_V400};\n"
+        f"@define-color headerbar_backdrop_color {KOLIBRI_BRAND_V300};\n"
+    )
+
+    css_provider: Gtk.CssProvider
 
     def __init__(self, *args, context: KolibriContext = None, **kwargs):
         super().__init__(*args, flags=Gio.ApplicationFlags.HANDLES_OPEN, **kwargs)
@@ -276,6 +304,13 @@ class Application(Adw.Application):
 
 class ChannelApplication(Application):
     __channel_id: str
+
+    CSS_OVERRIDE: str = (
+        f"@define-color headerbar_bg_color {KOLIBRI_CHANNEL_V400};\n"
+        f"@define-color headerbar_fg_color {KOLIBRI_BRAND_FG};\n"
+        f"@define-color headerbar_border_color {KOLIBRI_CHANNEL_V400};\n"
+        f"@define-color headerbar_backdrop_color {KOLIBRI_CHANNEL_V300};\n"
+    )
 
     def __init__(self, channel_id: str, *args, **kwargs):
         self.__channel_id = channel_id
