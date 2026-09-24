@@ -1,3 +1,5 @@
+# This repository has been archived! The GNOME app has been moved to the [Kolibri monorepo](https://github.com/learningequality/kolibri/tree/develop/platforms/flatpak-app)
+
 # kolibri-installer-gnome
 
 Kolibri desktop front-end for GNOME.
